@@ -1,0 +1,7 @@
+name = Islandora Request Access
+description = Request access to an Islandora Object you can't access
+package = Islandora
+version = 7.x-dev
+core = 7.x
+dependencies[] = islandora
+dependencies[] = xautoload (>= 7.x-5.0)

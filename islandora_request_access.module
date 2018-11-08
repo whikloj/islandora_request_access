@@ -1,0 +1,141 @@
+<?php
+
+define('ISLANDORA_REQUEST_ACCESS_ADMIN_PRIVILEGE', 'admin islandora_request_access requests');
+define('ISLANDORA_REQUEST_ACCESS_CAN_REQUEST_PRIVILEGE', 'can make islandora_request requests');
+
+/**
+ * Implements hook_permission().
+ */
+function islandora_request_access_permission() {
+  $permissions = array(
+    ISLANDORA_REQUEST_ACCESS_ADMIN_PRIVILEGE => array(
+    'title' => t('Administer access requests to Islandora objects.'),
+    'restrict access' => TRUE,
+    ),
+    ISLANDORA_REQUEST_ACCESS_CAN_REQUEST_PRIVILEGE => array(
+      'title' => t('Can request access to Islandora objects.'),
+    ),
+  );
+  return $permissions;
+}
+
+function islandora_request_access_block_info() {
+  $blocks = array(
+    'islandora_request_access_console' => array(
+      'info' => t('Islandora Request Access Console'),
+      'cache' => DRUPAL_NO_CACHE,
+    ),
+  );
+  return $blocks;
+}
+
+/**
+ * Implements hook_block_view().
+ */
+function islandora_request_access_block_view($delta = '') {
+  $block = array();
+  switch($delta){
+    case 'islandora_request_access_console':
+      $block['subject'] = t('Request access to object');
+      $block['content'] = islandora_request_access_block_content();
+  }
+  return $block;
+}
+
+/**
+ * Implements hook_block_list_alter().
+ */
+function islandora_request_access_block_list_alter(&$blocks) {
+  if (user_is_logged_in() && isset($blocks['islandora_request_access_console']) &&
+    user_access(ISLANDORA_REQUEST_ACCESS_CAN_REQUEST_PRIVILEGE))
+    $object = menu_get_object('islandora_object', 2);
+    if (isset($object) &&
+      $object !== FALSE &&
+      islandora_object_access(ISLANDORA_VIEW_OBJECTS, $object)) {
+        // User already has access, don't show block.
+        unset($blocks['islandora_request_access_console']);
+    }
+}
+
+
+function islandora_request_access_block_content() {
+  if (user_is_logged_in()) {
+    $object = menu_get_object('islandora_object', 2);
+    if (isset($object) && $object !== FALSE) {
+      if (user_access(ISLANDORA_REQUEST_ACCESS_ADMIN_PRIVILEGE)) {
+        // holder for possible admin by object.
+      }
+      else {
+
+      }
+    }
+  }
+}
+
+function islandora_request_access_request_status($pid, $userid) {
+  $output = '';
+  $db_query = db_query('SELECT * FROM {islandora_request_access_queue} WHERE pid = !pid AND user_id = !userid',
+    array(
+      '!pid' => $pid,
+      '!userid' => $userid,
+  ));
+  $db_query->execute();
+  if ($db_query->rowCount() > 0) {
+    // You've made a request.
+    foreach ($db_query->fetchAssoc() as $row) {
+      $output = t('Your request for access from @date ', array(
+        '@date' => format_date($row['created'], 'medium'),
+      ));
+      if (is_null($row['decision'])) {
+        $output .= t('is still pending');
+      }
+      elseif ($row['decision'] == 0) {
+        $output .= t('was denied on @date', array(
+          '@date' => format_date($row['responded'], 'medium'),
+        ));
+      }
+    }
+  }
+  else {
+    // You haven't made a request.
+    $output = drupal_render(drupal_get_form('islandora_request_access_request_form', $pid));
+  }
+  return $output;
+}
+
+function islandora_request_access_request_form($form, &$form_state, $pid) {
+  return array(
+    '#type' => 'container',
+    'islandora_request_access_label' => array(
+      '#type' => 'markup',
+      '#markup' => t('This object is restricted.'),
+    ),
+    'islandora_request_access_object' => array(
+      '#type' => 'hidden',
+      '#value' => $pid
+    ),
+    'islandora_request_access_submit' => array(
+      '#type' => 'submit',
+      '#value' => t('Request access'),
+    ),
+  );
+}
+
+function islandora_request_access_request_form_submit($form, &$form_state) {
+  global $user;
+  $pid = $form_state['#values']['pid'];
+  $userid = $user->id;
+  $db_exec = db_insert('islandora_request_access_queue')
+    ->fields(array(
+      'pid',
+      'user_id'
+    ))->values(array(
+      $pid,
+      $userid,
+    ));
+  $db_exec->execute();
+  drupal_set_message(t('Your access request has been sent.'));
+  drupal_goto(format_string('islandora/object/!pid', array(
+    '!pid' => $pid,
+  )));
+}
